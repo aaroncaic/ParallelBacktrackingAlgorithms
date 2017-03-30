@@ -9,11 +9,13 @@
 #include <time.h>
 #include <chrono>
 #include <limits>
+#include <math.h>
 
 int qRecord;      // Min number of queens to dominate board
 int** sol;		  // Final solution board
 int n;						// Board dimensions
 int level;
+int max_degree;
 int numTasks;
 std::mutex sol_mutex;
 
@@ -121,6 +123,81 @@ void copyArray(int** src, int** dest) {
   }
 
   return newNumZeros;
+}
+
+/*
+ * Main algorithm V5 (Parallel)
+ * Notes: Eliminated memory leaks.
+ *        Contains some optimizations.
+ */
+void QDBT5(int** b, int i, int j, int numQ, int numZeros) {
+  if(numQ + 1 >= qRecord) {
+    deleteArray(b);
+    return;
+  }
+
+  if(numQ + ceil(((double)(numZeros))/(max_degree+1)) >= qRecord) {
+    deleteArray(b);
+    return;
+  }
+
+  std::vector<std::thread> threads;
+  int k = i;
+  int l = j;
+  int counter = 0;
+  while(k < n) {
+    if(k != i) { l = 0; }
+    while(l < n) {
+
+      int** newB = new int*[n];
+      for(int h = 0; h < n; h++) {
+        newB[h] = new int[n];
+      }
+      copyArray(b, newB);
+      int newNumZeros = putQueens(newB, k, l, numQ, numZeros);
+
+      if(newNumZeros <= 0 && numQ + 1 < qRecord) {
+        sol_mutex.lock();
+        qRecord = numQ+1;
+        //std::cout << qRecord << std::endl;
+        sol = newB;
+        sol_mutex.unlock();
+        deleteArray(b);
+        for (auto& th : threads) th.join();
+        return;
+      }
+
+      // Compute position of next queen
+      int newI = -1;
+      int newJ = -1;
+      if(l < n - 1) {
+        newJ = l + 1;
+        newI = k;
+      } else if (k < n - 1){
+        newI = k + 1;
+        newJ = 0;
+      } else {
+        deleteArray(newB);
+        deleteArray(b);
+        for (auto& th : threads) th.join();
+        return;
+      }
+
+      if(numQ < level && counter < numTasks) {
+        threads.push_back(std::thread(QDBT5, newB, newI, newJ, numQ+1, newNumZeros));
+      } else {
+        QDBT5(newB, newI, newJ, numQ+1, newNumZeros);
+      }
+
+      l++;
+      counter++;
+    }
+    k++;
+  }
+
+  deleteArray(b);
+  for (auto& th : threads) th.join();
+  return;
 }
 
 /*
@@ -418,8 +495,14 @@ int main ( int argc, char *argv[] ) {
   }
 
   n = std::atoi(argv[1]);
-  numTasks = n;
+  numTasks = n+n;
   level = 1;
+
+  if(n % 2 == 0) {
+    max_degree = (n-1)*4 - 1;
+  } else {
+    max_degree = (n-1)*4;
+  }
 
   // Set minimum number of queens needed to dominate board
   qRecord = n;
@@ -437,7 +520,7 @@ int main ( int argc, char *argv[] ) {
   int numZeros = n*n;
 
   auto t1 = std::chrono::high_resolution_clock::now();
-	QDBT4(b, 0, 0, 0, numZeros);
+	QDBT5(b, 0, 0, 0, numZeros);
   auto t2 = std::chrono::high_resolution_clock::now();
 
   if(sol == NULL) {
@@ -464,7 +547,7 @@ int main ( int argc, char *argv[] ) {
     std::cout << row << std::endl;
   }
 
-  std::cout << qRecord << "Execution time: " << fp_ms.count() << " ms" <<std::endl;
+  std::cout << "Execution time: " << fp_ms.count() << " ms" <<std::endl;
 
   return 0;
 }
