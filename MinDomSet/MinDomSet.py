@@ -1,12 +1,13 @@
 import networkx as nx
 import time
 import math
+from multiprocessing import Process
 
 
 n = -1              # Number of nodes
 n_dominated = 0     # Number of nodes dominated
 num_choice = []     # Possible number of times node can be dominated
-num_dominated = []  # Number of time node has been dominated
+num_dominated = []  # Number of times a node has been dominated
 dom = []            # Current set of dominating nodes
 size = 0            # Size of dominating set
 min_dom = []        # Minimum dominating set of nodes
@@ -18,9 +19,9 @@ def min_dom_set_helper(G, level):
     global num_choice
 
     # Return if any node can no longer be dominated
-    for i in range(len(num_choice)):
-        if num_choice[i] <= 0:
-            return
+    #for i in range(len(num_choice)):
+    #    if num_choice[i] <= 0:
+    #        return
 
     global n
     global n_dominated
@@ -45,15 +46,26 @@ def min_dom_set_helper(G, level):
     # Set current node as not-part-of-dominating-set
     u = level
     num_choice[u] = num_choice[u] - 1
-    for v in G.neighbors(u):
-        num_choice[v] = num_choice[v] - 1
-
-    # Call recursively
-    min_dom_set_helper(G, level+1)
-
-    # Restore datastructure
-    for v in G.neighbors(u):
-        num_choice[v] = num_choice[v] + 1
+    if(num_choice[u] > 0):
+        cannot_be_dominated = False
+        for v in G.neighbors(u):
+            num_choice[v] = num_choice[v] - 1
+            if(num_choice[v] <= 0):
+                cannot_be_dominated = True
+                break
+    
+        # Call recursively
+        if(cannot_be_dominated == False):
+            min_dom_set_helper(G, level+1)
+    
+        # Restore datastructure
+        for v in G.neighbors(u):
+            if(num_choice[v] <= 0):
+                num_choice[v] = num_choice[v] + 1
+                break            
+            num_choice[v] = num_choice[v] + 1
+            
+    
     num_choice[u] = num_choice[u] + 1
 
     global num_dominated
@@ -166,7 +178,7 @@ def make_chess_board(n):
 
 
 # TEST CASES
-G = make_chess_board(6)
+G = make_chess_board(7)
 #G = nx.octahedral_graph()
 #G = nx.dodecahedral_graph()
 #G = nx.cubical_graph()
